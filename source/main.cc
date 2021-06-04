@@ -1,119 +1,6 @@
 #include <gba.h>
 
-class Sprite {
-public:
-  Sprite() {} 
-
-  void setPos(s16 x, s16 y) {
-    _attr0 &= 0xff00;
-    _attr0 |= (y & 0xff);
-
-    _attr1 &= 0xfe00;
-    _attr1 |= (x & 0x1ff);
-  }
-
-  s16 x() const {
-    s16 x = _attr1 & 0x1ff;
-    if(x & 0x100) {
-      x |= 0xfe00;
-    }
-    return x;
-  }
-  
-  s16 y() const {
-    s16 y = _attr0 & 0xff;
-    if(y & 0x80) {
-      y |= 0xff00;
-    }
-    return y;
-  }
-
-  void setTileIndex(u16 index) {
-    _attr2 &= ~0x03ff;
-    _attr2 |= index & 0x03ff;
-  }
-
-  u16 tileIndex() const {
-    return _attr2 & 0x03ff;
-  }
-
-  void setPalette(u8 index) {
-    _attr2 &= ~0xf000;
-    _attr2 |= (index & 0xf) << 12;
-  }
-
-  void setVFlip(bool flag) {
-    if(flag) {
-      _attr1 |= 0x2000;
-    } else {
-      _attr1 &= ~0x2000;
-    }
-  }
-
-  void setHFlip(bool flag) {
-    if(flag) {
-      _attr1 |= 0x1000;
-    } else {
-      _attr1 &= ~0x1000;
-    }
-  }
-
-protected:
-  u16 _attr0 = 0;
-  u16 _attr1 = 0;
-  u16 _attr2 = 0;
-  u16 _attr3 = 0;
-
-private:
-};
-
-class SpriteManager {
-public:
-  static void init() {
-    for(unsigned i = 0; i < NumSprites; i++) {
-      _sprites[i].setPos(SCREEN_WIDTH, SCREEN_HEIGHT);
-    }
-    _freeSprites[0] = 0xffffffff;
-    _freeSprites[1] = 0xffffffff;
-    _freeSprites[2] = 0xffffffff;
-    _freeSprites[3] = 0xffffffff;
-  }
-
-  static Sprite *newSprite() {
-    // find the next free sprite
-    int index = -1;
-    for(unsigned i = 0; i < 4; i++) {
-      if(_freeSprites[i] != 0) {
-        auto bit = __builtin_clz(_freeSprites[i]);
-        index = bit + (i * 32);
-        _freeSprites[i] &= ~(1 << (31 - bit)); 
-        break;
-      }
-    }
-    return (index == -1) ? nullptr : &_sprites[index];
-  }
-
-  static void freeSprite(Sprite *sprite) {
-    sprite->setPos(SCREEN_WIDTH, SCREEN_HEIGHT);
-    unsigned index = ((unsigned)(sprite - _sprites)) / sizeof(Sprite);
-    _freeSprites[index >> 5] |= 1 << (index & 0x1f);
-  }
-
-  static void updateAll() {
-    dmaCopy((u16 *)_sprites, (u16 *)OAM, sizeof(_sprites));
-  }
-
-  static const unsigned NumSprites = 128;
-
-protected:
-  static Sprite _sprites[NumSprites];
-  static u32 _freeSprites[4];
-
-private:
-};
-
-Sprite SpriteManager::_sprites[NumSprites];
-u32 SpriteManager::_freeSprites[4];
+#include "Sprite.hh"
 
 static s32 fixsin[360];
 
@@ -183,12 +70,10 @@ int main() {
   BG_COLORS[0] = RGB5(0, 0, 0);
 
   // setup the sprites
-  SpriteManager::init();
-
   Sprite *sprites[NumColors * NumSpritesPerColor];
   for(int i = NumSpritesPerColor - 1; i >= 0; i--) {
     for(unsigned c = 0; c < NumColors; c++) {
-      auto sprite = SpriteManager::newSprite();
+      auto sprite = SpriteManager::instance().newSprite();
       sprite->setPos((16 * i) - (c * 8), 80);
       sprite->setTileIndex(i);
       sprite->setPalette(c);
@@ -222,7 +107,7 @@ int main() {
 
     // wait for vblank before we update all the sprite in OAM
     VBlankIntrWait();
-    SpriteManager::updateAll();
+    SpriteManager::instance().updateAll();
   }
 
   return 0;
